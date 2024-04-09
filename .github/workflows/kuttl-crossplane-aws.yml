@@ -1,4 +1,4 @@
-name: provision-aws
+name: kuttl-crossplane-aws
 
 on: [push]
 
@@ -10,7 +10,7 @@ env:
   AWS_DEFAULT_REGION: 'eu-central-1'
 
 jobs:
-  crossplane-provision-aws:
+  run-kuttl:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -32,6 +32,9 @@ jobs:
       
       - name: Install kuttl
         run: |
+          echo "### Add homebrew to path as described in https://github.com/actions/runner-images/blob/main/images/linux/Ubuntu2004-Readme.md#notes"
+          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+        
           echo "### Install kuttl via brew"
           brew tap kudobuilder/tap
           brew install kuttl-cli

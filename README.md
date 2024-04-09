@@ -1,5 +1,9 @@
 # crossplane-objectstorage
-Crossplane Configuration delivering CRDs to provision a AWS S3 Bucket showcasing Uptest e2e testing
+[![kuttl-crossplane-aws](https://github.com/jonashackt/crossplane-objectstorage/actions/workflows/kuttl-crossplane-aws.yml/badge.svg)](https://github.com/jonashackt/crossplane-objectstorage/actions/workflows/kuttl-crossplane-aws.yml)
+[![License](http://img.shields.io/:license-mit-blue.svg)](https://github.com/jonashackt/crossplane-argocd/blob/master/LICENSE)
+[![renovateenabled](https://img.shields.io/badge/renovate-enabled-yellow)](https://renovatebot.com)
+
+Crossplane Configuration delivering CRDs to provision a AWS S3 Bucket showcasing KUTTL e2e testing
 
 > __WARNING:__ uptest is a work in progress and hardly ever used by any other than Upbound staff themselves. See this issue comment: https://github.com/upbound/official-providers-ci/issues/153#issuecomment-1756317685: "I think we have to be honest and document somewhere that currently uptest is not really usable without surrounding make targets and the build module :)"
 
