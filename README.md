@@ -222,6 +222,7 @@ Thus inside our [`kuttl-test.yaml`](kuttl-test.yaml) we add another `command` st
 ```yaml
 apiVersion: kuttl.dev/v1beta1
 kind: TestSuite
+timeout: 300 # We definitely need a higher timeout for the external AWS resources to become available
 commands:
   # Install crossplane via Helm Renovate enabled (see https://stackoverflow.com/a/71765472/4964553)
   - command: helm dependency update crossplane-install
@@ -235,6 +236,15 @@ testDirs:
   - tests/e2e/
 startKIND: true
 kindContext: crossplane-test
+```
+
+
+Also I configured a higher timeout for resources to become available [via the `timeout` configuration of our TestSuite](https://kuttl.dev/docs/testing/reference.html#testassert). Otherwise we'll run into errors like this soon:
+
+```shell
+case.go:364: failed in step 1-when-applying-claim
+    case.go:366: command "kubectl wait --for condition=Ready --timeout=180s objectstorage.crossplane.jonashackt.io/managed-upbound-s3" exceeded 30 sec timeout, context deadline exceeded
+
 ```
 
 
@@ -377,17 +387,20 @@ Therefore create a new file called `tests/e2e/objectstorage/00-given-install-xrd
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
+  # Keep in mind that the apis dir is way up the folder hierachy relative to this TestStep!
   # Install the XRD
-  - command: kubectl apply -f apis/objectstorage/definition.yaml
+  - command: kubectl apply -f ../../../apis/objectstorage/definition.yaml
   # Install the Composition
-  - command: kubectl apply -f apis/objectstorage/composition.yaml
+  - command: kubectl apply -f ../../../apis/objectstorage/composition.yaml
   # Wait for XRD to become "established"
   - command: kubectl wait --for condition=established --timeout=20s xrd/xobjectstorages.crossplane.jonashackt.io
 ```
 
-__TODO__: Install files from local project root instead of GitHub!
+Here we install our Composite Resource Definition (XRD) followed by our Composition under test.
 
-Right now the access of the local apis/objectstorage/definition.yaml &  apis/objectstorage/composition.yaml doesnt work as expected:
+We also wait for the XRD to become `established` before proceeding to the next step.
+
+If the kuttl logs show errors like `the path "apis/objectstorage/definition.yaml" does not exist`:
 
 ```shell
 === RUN   kuttl/harness
@@ -399,39 +412,24 @@ Right now the access of the local apis/objectstorage/definition.yaml &  apis/obj
     logger.go:42: 11:24:22 | objectstorage/0-given-install-xrd-composition | running command: [kubectl apply -f apis/objectstorage/definition.yaml]
     logger.go:42: 11:24:22 | objectstorage/0-given-install-xrd-composition | error: the path "apis/objectstorage/definition.yaml" does not exist
     logger.go:42: 11:24:22 | objectstorage/0-given-install-xrd-composition | command failure, skipping 1 additional commands
-    case.go:364: failed in step 0-given-install-xrd-composition
-    case.go:366: exit status 1
-    logger.go:42: 11:24:22 | objectstorage | objectstorage events from ns kuttl-test-hopeful-mustang:
-    logger.go:42: 11:24:22 | objectstorage | Deleting namespace: kuttl-test-hopeful-mustang
-=== CONT  kuttl
-    harness.go:405: run tests finished
-    harness.go:513: cleaning up
-    harness.go:522: collecting cluster logs to kind-logs-1712654667
-    harness.go:555: skipping cluster tear down
-    harness.go:556: to connect to the cluster, run: export KUBECONFIG="/home/jonashackt/dev/crossplane-objectstorage/kubeconfig"
+   ...
 --- FAIL: kuttl (127.38s)
     --- FAIL: kuttl/harness (0.00s)
         --- FAIL: kuttl/harness/objectstorage (5.41s)
 FAIL
 ```
 
+check the paths in your `command` statements! I missed this also in the first place, since in the TestSuite at [`kuttl-test.yaml`](kuttl-test.yaml) everything worked relatively from the root dir. __BUT__ remember, we're inside `tests/e2e/objectstorage` now! So we need to go up 3 dirs like `../../../apis/objectstorage/definition.yaml` to fetch the correct file.
 
 
 
-
-Here we install our Composite Resource Definition (XRD) followed by our Composition under test.
-
-We also wait for the XRD to become `established` before proceeding to the next step.
+### Create a kuttl test step 01-when-applying-claim.yaml
 
 https://kuttl.dev/docs/testing/steps.html#format
 
 > "In a test case's directory, each file that begins with the same index is considered a part of the same test step. All objects inside of a test step are operated on by the test harness simultaneously, so use separate test steps to order operations.""
 
 As kuttl executes every `00-*` prefixed test step found in the folder before proceeding to the `01-*` one, we can have the `00-given-install-xrd-composition` working as our preparation step for the other steps to come. Terminology is lent from BDD starting with `given`.
-
-
-
-### Create a kuttl test step 01-when-applying-claim.yaml
 
 As we already know Crossplane now it's the time to apply the XR or Claim (XRC).
 
@@ -442,7 +440,7 @@ apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
   # Create the XR/Claim
-  - command: kubectly apply -f examples/objectstorage/claim.yaml
+  - command: kubectl apply -f ../../../examples/objectstorage/claim.yaml
 ```
 
 Here we apply our Claim residing in the `examples` dir.
@@ -458,15 +456,41 @@ At this point Crossplane should create our S3 bucket in AWS!
 The BDD term `then` can't really be integrated into the final assert step. But luckily it's named `tests/e2e/objectstorage/01-assert.yaml`:
 
 ```yaml
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 30 # override test suite's long timeout again to have fast results in assertion
+# Clean up AWS resources if something goes wrong, see https://kuttl.dev/docs/testing/reference.html#collectors
+collectors:
+- type: command
+  command: kubectl delete -f ../../../examples/objectstorage/claim.yaml
+---
 apiVersion: crossplane.jonashackt.io/v1alpha1
 kind: ObjectStorage
+metadata:
+  namespace: default
+  name: managed-upbound-s3
 spec:
   parameters:
-    bucketName: devopsthde-bucket
+    bucketName: kuttl-test-bucket
     region: eu-central-1
+
 ```
 
-This test step will be considered completed once the `ObjectStorage` matches the state that we have defined. If the state is not reached by the time the assert's timeout has expired (30 seconds, by default), then the test step and case will be considered failed.
+This test step will be considered completed once the `ObjectStorage` matches the state that we have defined. If the state is not reached by the time the assert's timeout has expired, then the test step and case will be considered failed. 
+
+Using [an explicit `TestAssert` definition here](https://kuttl.dev/docs/testing/reference.html#testassert) we're able to override the timeout again here to enable a faster test cycle. Otherwise the assertion would also wait for 300 seconds as defined in the test suite above.
+
+Also we use a collector to make sure, a cleanup step is also run [in case of an error](https://kuttl.dev/docs/testing/reference.html#collectors).
+
+Be sure to define the exact `metadata` as in your Claim, otherwise kuttl won't find it and will give an error like this:
+
+```shell
+    logger.go:42: 15:54:03 | objectstorage/1-when-applying-claim | test step failed 1-when-applying-claim
+    ...
+    logger.go:42: 15:54:03 | objectstorage/1-when-applying-claim | objectstorage.crossplane.jonashackt.io "managed-upbound-s3" deleted
+    case.go:364: failed in step 1-when-applying-claim
+    case.go:366: no resources matched of kind: crossplane.jonashackt.io/v1alpha1, Kind=ObjectStorage
+```
 
 Now run our test suite with
 
@@ -482,7 +506,24 @@ kubectl kuttl test --start-kind=false
 
 A sole `kubectl kuttl test` will give `KIND is already running, unable to start` errors.
 
+You may even watch your AWS console, where the bucket gets created:
 
+![](docs/kuttl-test-bucket-created-aws.png)
+
+
+### Cleanup after assertion
+
+We should also clean up all resources after the last assertion ran. Therefore let's create a `02-*` step like in [`tests/e2e/objectstorage/02-cleanup.yaml`](tests/e2e/objectstorage/02-cleanup.yaml):
+
+```yaml
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  # Cleanup AWS resources
+  - command: kubectl delete -f ../../../examples/objectstorage/claim.yaml
+```
+
+This should make sure, that our Bucket get's deleted in the end - when everything went fine. If not, we have configured our [collector inside the `TestAssert` config](https://kuttl.dev/docs/testing/reference.html#testassert).
 
 
 

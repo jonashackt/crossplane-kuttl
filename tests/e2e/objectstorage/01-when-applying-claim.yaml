@@ -1,0 +1,7 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  # Create the XR/Claim
+  - command: kubectl apply -f ../../../examples/objectstorage/claim.yaml
+  # Wait for S3 Bucket to become fully available before proceeding
+  - command: kubectl wait --for condition=Ready --timeout=180s objectstorage.crossplane.jonashackt.io/managed-upbound-s3

@@ -1,0 +1,17 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 30 # override test suite's long timeout again to have fast results in assertion
+# Clean up AWS resources if something goes wrong, see https://kuttl.dev/docs/testing/reference.html#collectors
+collectors:
+- type: command
+  command: kubectl delete -f ../../../examples/objectstorage/claim.yaml
+---
+apiVersion: crossplane.jonashackt.io/v1alpha1
+kind: ObjectStorage
+metadata:
+  namespace: default
+  name: managed-upbound-s3
+spec:
+  parameters:
+    bucketName: kuttl-test-bucket
+    region: eu-central-1
