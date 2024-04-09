@@ -1,7 +1,19 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestSuite
 commands:
+  # Install crossplane via Helm Renovate enabled (see https://stackoverflow.com/a/71765472/4964553)
+  - command: helm dependency update crossplane-install
   - command: helm upgrade --install crossplane --namespace crossplane-system crossplane-install --create-namespace --wait
+
+  # Install the crossplane Upbound AWS S3 Provider Family
+  - command: kubectl apply -f tests/init/upbound-provider-aws-s3.yaml
+  # Wait until AWS Provider is up and running
+  - command: kubectl wait --for=condition=healthy --timeout=180s provider/upbound-provider-aws-s3
+
+  # Create AWS Provider secret
+  - command: kubectl create secret generic aws-creds -n crossplane-system --from-file=creds=./aws-creds.conf
+  # Create ProviderConfig to consume the Secret containing AWS credentials
+  - command: kubectl apply -f tests/init/provider-config-aws.yaml
 testDirs:
   - tests/e2e/
 startKIND: true
