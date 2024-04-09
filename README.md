@@ -3,22 +3,13 @@ Crossplane Configuration delivering CRDs to provision a AWS S3 Bucket showcasing
 
 > __WARNING:__ uptest is a work in progress and hardly ever used by any other than Upbound staff themselves. See this issue comment: https://github.com/upbound/official-providers-ci/issues/153#issuecomment-1756317685: "I think we have to be honest and document somewhere that currently uptest is not really usable without surrounding make targets and the build module :)"
 
-Maybe we should go with native kuttl instead for the meantime: https://aaroneaton.com/walkthroughs/crossplane-package-testing-with-kuttl/
+Therefore in this repository we went with native kuttl instead for the meantime. 
 
-
-This project was not created to show, how to provision an S3 bucket with Crossplane (this was already done here https://github.com/jonashackt/crossplane-aws-azure), but to show how to use Uptest. It build fairly simple:
+__TLDR;__ run:
 
 ```shell
-├── apis
-│   └── objectstorage
-│       ├── composition.yaml
-│       └── definition.yaml
-├── examples
-│   └── objectstorage
-│       └── claim.yaml
+kubectl kuttl test
 ```
-
-We have a simple Composition and XRD under `apis` dir. And a corresponding example XRC under `examples` dir.
 
 
 # The KUbernetes Test TooL (kuttl) 
@@ -56,10 +47,6 @@ https://kuttl.dev/docs/cli.html
 One of the best ways to install a kubectl plugin is to use the package manager [krew](https://github.com/kubernetes-sigs/krew). So first install krew via your preferred package manager (see https://krew.sigs.k8s.io/docs/user-guide/setup/install/):
 
 ```shell
-# Mac
-brew tap kudobuilder/tap
-brew install kuttl-cli
-
 # Manjaro Linux
 pamac install krew
 ```
@@ -526,6 +513,87 @@ commands:
 This should make sure, that our Bucket get's deleted in the end - when everything went fine. If not, we have configured our [collector inside the `TestAssert` config](https://kuttl.dev/docs/testing/reference.html#testassert).
 
 
+A full Crossplane featured kuttl test run should look somehow like this:
+
+```shell
+kubectl kuttl test           1 ✘  kind-kind ⎈ 
+=== RUN   kuttl
+    harness.go:462: starting setup
+    harness.go:249: running tests with KIND.
+    harness.go:173: temp folder created /tmp/kuttl2687417911
+    harness.go:155: Starting KIND cluster
+    kind.go:66: Adding Containers to KIND...
+    harness.go:275: Successful connection to cluster at: https://127.0.0.1:38097
+    logger.go:42: 16:26:23 |  | running command: [helm dependency update crossplane-install]
+    logger.go:42: 16:26:24 |  | WARNING: Kubernetes configuration file is group-readable. This is insecure. Location: /home/jonashackt/dev/crossplane-objectstorage/kubeconfig
+    logger.go:42: 16:26:24 |  | WARNING: Kubernetes configuration file is world-readable. This is insecure. Location: /home/jonashackt/dev/crossplane-objectstorage/kubeconfig
+    logger.go:42: 16:26:24 |  | Getting updates for unmanaged Helm repositories...
+    logger.go:42: 16:26:24 |  | ...Successfully got an update from the "https://charts.crossplane.io/stable" chart repository
+    logger.go:42: 16:26:24 |  | Saving 1 charts
+    logger.go:42: 16:26:25 |  | Downloading crossplane from repo https://charts.crossplane.io/stable
+    logger.go:42: 16:26:25 |  | Deleting outdated charts
+    logger.go:42: 16:26:25 |  | running command: [helm upgrade --install --force crossplane --namespace crossplane-system crossplane-install --create-namespace --wait]
+    logger.go:42: 16:26:25 |  | WARNING: Kubernetes configuration file is group-readable. This is insecure. Location: /home/jonashackt/dev/crossplane-objectstorage/kubeconfig
+    logger.go:42: 16:26:25 |  | WARNING: Kubernetes configuration file is world-readable. This is insecure. Location: /home/jonashackt/dev/crossplane-objectstorage/kubeconfig
+    logger.go:42: 16:26:25 |  | Release "crossplane" does not exist. Installing it now.
+    logger.go:42: 16:26:47 |  | NAME: crossplane
+    logger.go:42: 16:26:47 |  | LAST DEPLOYED: Tue Apr  9 16:26:25 2024
+    logger.go:42: 16:26:47 |  | NAMESPACE: crossplane-system
+    logger.go:42: 16:26:47 |  | STATUS: deployed
+    logger.go:42: 16:26:47 |  | REVISION: 1
+    logger.go:42: 16:26:47 |  | TEST SUITE: None
+    logger.go:42: 16:26:47 |  | running command: [kubectl apply -f tests/init/upbound-provider-aws-s3.yaml]
+    logger.go:42: 16:26:47 |  | provider.pkg.crossplane.io/upbound-provider-aws-s3 created
+    logger.go:42: 16:26:47 |  | running command: [kubectl wait --for=condition=healthy --timeout=180s provider/upbound-provider-aws-s3]
+    logger.go:42: 16:27:53 |  | provider.pkg.crossplane.io/upbound-provider-aws-s3 condition met
+    logger.go:42: 16:27:53 |  | running command: [kubectl create secret generic aws-creds -n crossplane-system --from-file=creds=./aws-creds.conf]
+    logger.go:42: 16:27:53 |  | secret/aws-creds created
+    logger.go:42: 16:27:53 |  | running command: [kubectl apply -f tests/init/provider-config-aws.yaml]
+    logger.go:42: 16:27:54 |  | providerconfig.aws.upbound.io/default created
+    harness.go:360: running tests
+    harness.go:73: going to run test suite with timeout of 300 seconds for each step
+    harness.go:372: testsuite: tests/e2e/ has 1 tests
+=== RUN   kuttl/harness
+=== RUN   kuttl/harness/objectstorage
+=== PAUSE kuttl/harness/objectstorage
+=== CONT  kuttl/harness/objectstorage
+    logger.go:42: 16:27:54 | objectstorage | Creating namespace: kuttl-test-many-bengal
+    logger.go:42: 16:27:54 | objectstorage/0-given-install-xrd-composition | starting test step 0-given-install-xrd-composition
+    logger.go:42: 16:27:54 | objectstorage/0-given-install-xrd-composition | running command: [kubectl apply -f ../../../apis/objectstorage/definition.yaml]
+    logger.go:42: 16:27:54 | objectstorage/0-given-install-xrd-composition | compositeresourcedefinition.apiextensions.crossplane.io/xobjectstorages.crossplane.jonashackt.io created
+    logger.go:42: 16:27:54 | objectstorage/0-given-install-xrd-composition | running command: [kubectl apply -f ../../../apis/objectstorage/composition.yaml]
+    logger.go:42: 16:27:54 | objectstorage/0-given-install-xrd-composition | composition.apiextensions.crossplane.io/objectstorage-composition created
+    logger.go:42: 16:27:54 | objectstorage/0-given-install-xrd-composition | running command: [kubectl wait --for condition=established --timeout=20s xrd/xobjectstorages.crossplane.jonashackt.io]
+    logger.go:42: 16:27:54 | objectstorage/0-given-install-xrd-composition | compositeresourcedefinition.apiextensions.crossplane.io/xobjectstorages.crossplane.jonashackt.io condition met
+    logger.go:42: 16:27:54 | objectstorage/0-given-install-xrd-composition | test step completed 0-given-install-xrd-composition
+    logger.go:42: 16:27:54 | objectstorage/1-when-applying-claim | starting test step 1-when-applying-claim
+    logger.go:42: 16:27:54 | objectstorage/1-when-applying-claim | running command: [kubectl apply -f ../../../examples/objectstorage/claim.yaml]
+    logger.go:42: 16:27:56 | objectstorage/1-when-applying-claim | objectstorage.crossplane.jonashackt.io/managed-upbound-s3 created
+    logger.go:42: 16:27:56 | objectstorage/1-when-applying-claim | running command: [kubectl wait --for condition=Ready --timeout=180s objectstorage.crossplane.jonashackt.io/managed-upbound-s3]
+    logger.go:42: 16:29:58 | objectstorage/1-when-applying-claim | objectstorage.crossplane.jonashackt.io/managed-upbound-s3 condition met
+    logger.go:42: 16:29:58 | objectstorage/1-when-applying-claim | test step completed 1-when-applying-claim
+    logger.go:42: 16:29:58 | objectstorage/2-cleanup | starting test step 2-cleanup
+    logger.go:42: 16:29:58 | objectstorage/2-cleanup | running command: [kubectl delete -f ../../../examples/objectstorage/claim.yaml]
+    logger.go:42: 16:29:58 | objectstorage/2-cleanup | objectstorage.crossplane.jonashackt.io "managed-upbound-s3" deleted
+    logger.go:42: 16:29:58 | objectstorage/2-cleanup | test step completed 2-cleanup
+    logger.go:42: 16:29:58 | objectstorage | objectstorage events from ns kuttl-test-many-bengal:
+    logger.go:42: 16:29:58 | objectstorage | Deleting namespace: kuttl-test-many-bengal
+=== CONT  kuttl
+    harness.go:405: run tests finished
+    harness.go:513: cleaning up
+    harness.go:522: collecting cluster logs to kind-logs-1712673003
+    harness.go:570: removing temp folder: "/tmp/kuttl2687417911"
+    harness.go:576: tearing down kind cluster
+--- PASS: kuttl (247.84s)
+    --- PASS: kuttl/harness (0.00s)
+        --- PASS: kuttl/harness/objectstorage (129.44s)
+PASS
+```
+
+
+
+
+
 
 
 # Uptest
@@ -632,3 +700,8 @@ uptest e2e examples/objectstorage/claim.yaml --test-directory="$PWD/temp/uptest-
 ```
 
 TODO: Didn't get it to work though. Seems that https://github.com/upbound/official-providers-ci/issues/153#issuecomment-1756317685 is correct currently :(
+
+
+# Links
+
+https://aaroneaton.com/walkthroughs/crossplane-package-testing-with-kuttl/

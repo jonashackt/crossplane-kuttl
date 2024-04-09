@@ -1,0 +1,54 @@
+name: provision-aws
+
+on: [push]
+
+env:
+  KIND_NODE_VERSION: v1.29.0
+  # AWS
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  AWS_DEFAULT_REGION: 'eu-central-1'
+
+jobs:
+  crossplane-provision-aws:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+
+      - name: Install kind
+        run: |
+          echo "### Add homebrew to path as described in https://github.com/actions/runner-images/blob/main/images/linux/Ubuntu2004-Readme.md#notes"
+          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+
+          echo "### Install kind via brew"
+          brew install kind
+
+          echo "### Create kind cluster"
+          kind create cluster --image "kindest/node:$KIND_NODE_VERSION" --wait 5m
+
+          echo "### Let's try to access our kind cluster via kubectl"
+          kubectl get nodes
+      
+      - name: Install kuttl
+        run: |
+          echo "### Install kuttl via brew"
+          brew tap kudobuilder/tap
+          brew install kuttl-cli
+
+          echo "### Let's try to use kuttl"
+          kubectl kuttl --version
+
+      - name: Prepare AWS access via aws-creds.conf
+        run: |
+          echo "### Create aws-creds.conf file"
+          echo "[default]
+          aws_access_key_id = $AWS_ACCESS_KEY_ID
+          aws_secret_access_key = $AWS_SECRET_ACCESS_KEY
+          " > aws-creds.conf
+
+      - name: Run Crossplane featured kuttl tests
+        run: |
+          kubectl kuttl test
+      
+      
