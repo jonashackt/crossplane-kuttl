@@ -1,0 +1,8 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestSuite
+commands:
+  - command: helm upgrade --install crossplane --namespace crossplane-system crossplane-install --create-namespace --wait
+testDirs:
+  - tests/e2e/
+startKIND: true
+kindContext: crossplane-test
