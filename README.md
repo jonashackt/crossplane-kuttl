@@ -597,6 +597,68 @@ PASS
 
 
 
+# Doing it all with GitHub Actions
+
+In order to receive all the benefits of testing, we should execute the kuttl tests on a regular basis and on any updates occuring (triggered by Renovate for example). Thus I did all the steps above in GitHub Actions again [`.github/workflows/kuttl-crossplane-aws.yml](.github/workflows/kuttl-crossplane-aws.yml):
+
+```shell
+name: kuttl-crossplane-aws
+
+on: [push]
+
+env:
+  KIND_NODE_VERSION: v1.29.0
+  # AWS
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  AWS_DEFAULT_REGION: 'eu-central-1'
+
+jobs:
+  run-kuttl:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+
+      - name: Install kind
+        run: |
+          echo "### Add homebrew to path as described in https://github.com/actions/runner-images/blob/main/images/linux/Ubuntu2004-Readme.md#notes"
+          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+
+          echo "### Install kind via brew"
+          brew install kind
+
+          echo "### Create kind cluster"
+          kind create cluster --image "kindest/node:$KIND_NODE_VERSION" --wait 5m
+
+          echo "### Let's try to access our kind cluster via kubectl"
+          kubectl get nodes
+
+      - name: Prepare AWS access via aws-creds.conf
+        run: |
+          echo "### Create aws-creds.conf file"
+          echo "[default]
+          aws_access_key_id = $AWS_ACCESS_KEY_ID
+          aws_secret_access_key = $AWS_SECRET_ACCESS_KEY
+          " > aws-creds.conf
+
+      - name: Install kuttl & run Crossplane featured kuttl tests
+        run: |
+          echo "### Add homebrew to path as described in https://github.com/actions/runner-images/blob/main/images/linux/Ubuntu2004-Readme.md#notes"
+          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+        
+          echo "### Install kuttl via brew"
+          brew tap kudobuilder/tap
+          brew install kuttl-cli
+
+          echo "### Let's try to use kuttl"
+          kubectl kuttl --version
+
+          echo "### Run Crossplane featured kuttl tests"
+          kubectl kuttl test
+```
+
+
 
 
 
