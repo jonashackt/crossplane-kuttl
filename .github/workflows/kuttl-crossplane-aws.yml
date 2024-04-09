@@ -29,8 +29,16 @@ jobs:
 
           echo "### Let's try to access our kind cluster via kubectl"
           kubectl get nodes
-      
-      - name: Install kuttl
+
+      - name: Prepare AWS access via aws-creds.conf
+        run: |
+          echo "### Create aws-creds.conf file"
+          echo "[default]
+          aws_access_key_id = $AWS_ACCESS_KEY_ID
+          aws_secret_access_key = $AWS_SECRET_ACCESS_KEY
+          " > aws-creds.conf
+
+      - name: Install kuttl & run Crossplane featured kuttl tests
         run: |
           echo "### Add homebrew to path as described in https://github.com/actions/runner-images/blob/main/images/linux/Ubuntu2004-Readme.md#notes"
           eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
@@ -42,16 +50,7 @@ jobs:
           echo "### Let's try to use kuttl"
           kubectl kuttl --version
 
-      - name: Prepare AWS access via aws-creds.conf
-        run: |
-          echo "### Create aws-creds.conf file"
-          echo "[default]
-          aws_access_key_id = $AWS_ACCESS_KEY_ID
-          aws_secret_access_key = $AWS_SECRET_ACCESS_KEY
-          " > aws-creds.conf
-
-      - name: Run Crossplane featured kuttl tests
-        run: |
+          echo "### Run Crossplane featured kuttl tests"
           kubectl kuttl test
       
       
