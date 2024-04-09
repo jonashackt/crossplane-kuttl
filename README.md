@@ -30,6 +30,10 @@ https://kuttl.dev/docs/kuttl-test-harness.html
 So kuttl reminds me of Molecule for Ansible: A test harness for any Kubernetes application. It sounds like a great fit for Crossplane!
 
 
+### Prerequisites
+
+Be sure to have `kubectl`, `helm` & `kind` installed.
+
 
 ### Install kind
 
@@ -363,19 +367,120 @@ mkdir tests/e2e/objectstorage
 
 
 
+### Create a kuttl test step 00-given-install-xrd-composition.yaml
 
-### Create a kuttl test step
+Now we're where we wanted to be in the first place: Writing our first Crossplane-enabled kuttl `TestStep`.
 
-To create a first test step, 
+Therefore create a new file called `tests/e2e/objectstorage/00-given-install-xrd-composition.yaml`: 
+
+```yaml
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  # Install the XRD
+  - command: kubectl apply -f apis/objectstorage/definition.yaml
+  # Install the Composition
+  - command: kubectl apply -f apis/objectstorage/composition.yaml
+  # Wait for XRD to become "established"
+  - command: kubectl wait --for condition=established --timeout=20s xrd/xobjectstorages.crossplane.jonashackt.io
+```
+
+__TODO__: Install files from local project root instead of GitHub!
+
+Right now the access of the local apis/objectstorage/definition.yaml &  apis/objectstorage/composition.yaml doesnt work as expected:
+
+```shell
+=== RUN   kuttl/harness
+=== RUN   kuttl/harness/objectstorage
+=== PAUSE kuttl/harness/objectstorage
+=== CONT  kuttl/harness/objectstorage
+    logger.go:42: 11:24:22 | objectstorage | Creating namespace: kuttl-test-hopeful-mustang
+    logger.go:42: 11:24:22 | objectstorage/0-given-install-xrd-composition | starting test step 0-given-install-xrd-composition
+    logger.go:42: 11:24:22 | objectstorage/0-given-install-xrd-composition | running command: [kubectl apply -f apis/objectstorage/definition.yaml]
+    logger.go:42: 11:24:22 | objectstorage/0-given-install-xrd-composition | error: the path "apis/objectstorage/definition.yaml" does not exist
+    logger.go:42: 11:24:22 | objectstorage/0-given-install-xrd-composition | command failure, skipping 1 additional commands
+    case.go:364: failed in step 0-given-install-xrd-composition
+    case.go:366: exit status 1
+    logger.go:42: 11:24:22 | objectstorage | objectstorage events from ns kuttl-test-hopeful-mustang:
+    logger.go:42: 11:24:22 | objectstorage | Deleting namespace: kuttl-test-hopeful-mustang
+=== CONT  kuttl
+    harness.go:405: run tests finished
+    harness.go:513: cleaning up
+    harness.go:522: collecting cluster logs to kind-logs-1712654667
+    harness.go:555: skipping cluster tear down
+    harness.go:556: to connect to the cluster, run: export KUBECONFIG="/home/jonashackt/dev/crossplane-objectstorage/kubeconfig"
+--- FAIL: kuttl (127.38s)
+    --- FAIL: kuttl/harness (0.00s)
+        --- FAIL: kuttl/harness/objectstorage (5.41s)
+FAIL
+```
 
 
 
 
 
+Here we install our Composite Resource Definition (XRD) followed by our Composition under test.
+
+We also wait for the XRD to become `established` before proceeding to the next step.
+
+https://kuttl.dev/docs/testing/steps.html#format
+
+> "In a test case's directory, each file that begins with the same index is considered a part of the same test step. All objects inside of a test step are operated on by the test harness simultaneously, so use separate test steps to order operations.""
+
+As kuttl executes every `00-*` prefixed test step found in the folder before proceeding to the `01-*` one, we can have the `00-given-install-xrd-composition` working as our preparation step for the other steps to come. Terminology is lent from BDD starting with `given`.
 
 
 
+### Create a kuttl test step 01-when-applying-claim.yaml
 
+As we already know Crossplane now it's the time to apply the XR or Claim (XRC).
+
+Therefore I created a `tests/e2e/objectstorage/01-when-applying-claim.yaml`, prefixed with a `when` according to BDD practices:
+
+```yaml
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  # Create the XR/Claim
+  - command: kubectly apply -f examples/objectstorage/claim.yaml
+```
+
+Here we apply our Claim residing in the `examples` dir.
+
+At this point Crossplane should create our S3 bucket in AWS!
+
+
+
+### Validate / Assert 
+
+> It's crucial to use `01-assert` as the name here, to get the assertion beeing started after the Claim has been applied.
+
+The BDD term `then` can't really be integrated into the final assert step. But luckily it's named `tests/e2e/objectstorage/01-assert.yaml`:
+
+```yaml
+apiVersion: crossplane.jonashackt.io/v1alpha1
+kind: ObjectStorage
+spec:
+  parameters:
+    bucketName: devopsthde-bucket
+    region: eu-central-1
+```
+
+This test step will be considered completed once the `ObjectStorage` matches the state that we have defined. If the state is not reached by the time the assert's timeout has expired (30 seconds, by default), then the test step and case will be considered failed.
+
+Now run our test suite with
+
+```shell
+kubectl kuttl test --skip-cluster-delete
+```
+
+The `--skip-cluster-delete` will preserve the kind cluster, if our tests failed and thus speep up our development cycle - otherwise kind and the Crossplane installation/configuration will take place in every test run. Since kuttl will create a local `kubeconfig` file, it will also reuse the kind cluster automatically in subsequent runs of:
+
+```shell
+kubectl kuttl test --start-kind=false
+```
+
+A sole `kubectl kuttl test` will give `KIND is already running, unable to start` errors.
 
 
 
