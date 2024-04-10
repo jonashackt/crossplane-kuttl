@@ -66,6 +66,12 @@ kind create cluster --image kindest/node:v1.29.2 --wait 5m
 
 https://kuttl.dev/docs/cli.html 
 
+```shell
+# On a Mac
+brew tap kudobuilder/tap
+brew install kuttl-cli
+```
+
 One of the best ways to install a kubectl plugin is to use the package manager [krew](https://github.com/kubernetes-sigs/krew). So first install krew via your preferred package manager (see https://krew.sigs.k8s.io/docs/user-guide/setup/install/):
 
 ```shell
@@ -591,6 +597,8 @@ spec:
 
 This test step will be considered completed once our Managed resources rendered are matching the state that we have defined. If the state is not reached by the time the assert's timeout has expired, then the test step and case will be considered failed. 
 
+> Only necessary for real external AWS infrastructure:
+
 Using [an explicit `TestAssert` definition here](https://kuttl.dev/docs/testing/reference.html#testassert) we're able to override the timeout again here to enable a faster test cycle. Otherwise the assertion would also wait for 300 seconds as defined in the test suite above.
 
 Also we use a collector to make sure, a cleanup step is also run [in case of an error](https://kuttl.dev/docs/testing/reference.html#collectors).
@@ -729,7 +737,6 @@ name: kuttl-crossplane-aws
 on: [push]
 
 env:
-  KIND_NODE_VERSION: v1.29.0
   # AWS
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -741,20 +748,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@master
-
-      - name: Install kind
-        run: |
-          echo "### Add homebrew to path as described in https://github.com/actions/runner-images/blob/main/images/linux/Ubuntu2004-Readme.md#notes"
-          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-
-          echo "### Install kind via brew"
-          brew install kind
-
-          echo "### Create kind cluster"
-          kind create cluster --image "kindest/node:$KIND_NODE_VERSION" --wait 5m
-
-          echo "### Let's try to access our kind cluster via kubectl"
-          kubectl get nodes
 
       - name: Prepare AWS access via aws-creds.conf
         run: |
@@ -780,6 +773,29 @@ jobs:
           kubectl kuttl test
 ```
 
+
+### Fixing GitHub Actions tests: cannot get terraform setup: failed to retrieve aws credentials from aws config
+
+It seems that we need to configure AWS credentials for the Crossplane AWS Provider. Otherwise it won't run:
+
+```shell
+connect failed: cannot initialize the Terraform plugin SDK async external
+        +      client: cannot get terraform setup: failed to retrieve aws credentials from
+        +      aws config: failed to refresh cached credentials, static credentials are empty
+```
+
+So even if we don't really create AWS resources, we need to configure the AWS credentials like this:
+
+```yaml
+env:
+  ...
+  # Configure AWS creds to prevent error: cannot get terraform setup: failed to retrieve aws credentials from aws config
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  AWS_DEFAULT_REGION: 'eu-central-1'
+```
+
+And also create the `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` as Actions secrets in the GitHub repository.
 
 
 

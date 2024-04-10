@@ -1,6 +1,5 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestSuite
-timeout: 300 # We definitely need a higher timeout for the external AWS resources to become available
 commands:
   # Install crossplane via Helm Renovate enabled (see https://stackoverflow.com/a/71765472/4964553)
   - command: helm dependency update crossplane/install
@@ -11,9 +10,8 @@ commands:
   # Wait until AWS Provider is up and running
   - command: kubectl wait --for=condition=healthy --timeout=180s provider/upbound-provider-aws-s3
 
-  # Create AWS Provider secret (pre-deleting it to prevent errors like this while re-using the kuttl kind cluster)
-  - command: kubectl delete secret aws-creds -n crossplane-system --ignore-not-found
-  - command: kubectl create secret generic aws-creds -n crossplane-system --from-file=creds=./aws-creds.conf
+  # Create AWS Provider secret without AWS access
+  - command: kubectl apply -f crossplane/provider/non-access-secret.yaml
   # Create ProviderConfig to consume the Secret containing AWS credentials
   - command: kubectl apply -f crossplane/provider/provider-config-aws.yaml
 testDirs:

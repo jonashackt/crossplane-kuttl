@@ -3,7 +3,6 @@ name: kuttl-crossplane-aws
 on: [push]
 
 env:
-  KIND_NODE_VERSION: v1.29.0
   # AWS
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -15,20 +14,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@master
-
-      - name: Install kind
-        run: |
-          echo "### Add homebrew to path as described in https://github.com/actions/runner-images/blob/main/images/linux/Ubuntu2004-Readme.md#notes"
-          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-
-          echo "### Install kind via brew"
-          brew install kind
-
-          echo "### Create kind cluster"
-          kind create cluster --image "kindest/node:$KIND_NODE_VERSION" --wait 5m
-
-          echo "### Let's try to access our kind cluster via kubectl"
-          kubectl get nodes
 
       - name: Prepare AWS access via aws-creds.conf
         run: |
