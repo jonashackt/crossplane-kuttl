@@ -6,12 +6,22 @@ collectors:
 - type: command
   command: kubectl delete -f ../../../examples/objectstorage/claim.yaml
 ---
-apiVersion: crossplane.jonashackt.io/v1alpha1
-kind: ObjectStorage
+apiVersion: s3.aws.upbound.io/v1beta1
+kind: Bucket
 metadata:
-  namespace: default
-  name: managed-upbound-s3
+  name: kuttl-test-bucket
 spec:
-  parameters:
-    bucketName: kuttl-test-bucket
+  forProvider:
+    region: eu-central-1
+---
+apiVersion: s3.aws.upbound.io/v1beta1
+kind: BucketACL
+metadata:
+  name: kuttl-test-bucket-acl
+spec:
+  forProvider:
+    acl: public-read
+    bucket: kuttl-test-bucket # This is only testable with real AWS infrastructure
+    bucketRef:
+      name: kuttl-test-bucket
     region: eu-central-1
