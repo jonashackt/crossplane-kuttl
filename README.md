@@ -1,5 +1,7 @@
 # crossplane-kuttl
 [![kuttl-crossplane-aws](https://github.com/jonashackt/crossplane-kuttl/actions/workflows/kuttl-crossplane-aws.yml/badge.svg)](https://github.com/jonashackt/crossplane-kuttl/actions/workflows/kuttl-crossplane-aws.yml)
+![crossplane-version](https://img.shields.io/badge/dynamic/yaml?url=https%3A%2F%2Fraw.githubusercontent.com%2Fjonashackt%2Fcrossplane-kuttl%2Fmain%2Fcrossplane%2Finstall%2FChart.yaml&query=%24.dependencies%5B%3A1%5D.version&label=crossplane&color=blue)
+![provider-aws-s3](https://img.shields.io/badge/dynamic/yaml?url=https%3A%2F%2Fraw.githubusercontent.com%2Fjonashackt%2Fcrossplane-kuttl%2Fmain%2Fcrossplane%2Fprovider%2Fupbound-provider-aws-s3.yaml&query=%24.spec.package&label=provider-aws-s3&color=rgb(109%2C%20100%2C%20245))
 [![License](http://img.shields.io/:license-mit-blue.svg)](https://github.com/jonashackt/crossplane-kuttl/blob/master/LICENSE)
 [![renovateenabled](https://img.shields.io/badge/renovate-enabled-yellow)](https://renovatebot.com)
 
