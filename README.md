@@ -9,7 +9,7 @@ Why I didn't choose to use [uptest](https://github.com/crossplane/uptest):
 
 > __WARNING:__ uptest is a work in progress and hardly ever used by any other than Upbound staff themselves. See [this issue comment](https://github.com/upbound/official-providers-ci/issues/153#issuecomment-1756317685): "I think we have to be honest and document somewhere that currently uptest is not really usable without surrounding make targets and the build module :)"
 
-Therefore in this repository I went with native kuttl instead for the meantime. 
+Therefore - and since uptest is based on kuttl - in this repository I went with native kuttl instead for the meantime. 
 
 __TLDR;__ run:
 
@@ -597,7 +597,7 @@ spec:
 
 This test step will be considered completed once our Managed resources rendered are matching the state that we have defined. If the state is not reached by the time the assert's timeout has expired, then the test step and case will be considered failed. 
 
-> Only necessary for real external AWS infrastructure:
+> __The following is only necessary for real external AWS infrastructure:__
 
 Using [an explicit `TestAssert` definition here](https://kuttl.dev/docs/testing/reference.html#testassert) we're able to override the timeout again here to enable a faster test cycle. Otherwise the assertion would also wait for 300 seconds as defined in the test suite above.
 
@@ -678,6 +678,8 @@ Then you might only be using the `Configure AWS Provider in kuttl without AWS ac
 
 
 ### Cleanup after assertion
+
+> __The following is only necessary for real external AWS infrastructure:__
 
 We should also clean up all resources after the last assertion ran. Therefore let's create a `02-*` step like in [`tests/e2e/objectstorage/02-cleanup.yaml`](tests/e2e/objectstorage/02-cleanup.yaml):
 
@@ -781,6 +783,7 @@ name: kuttl-crossplane-aws
 
 on: [push]
 
+# Secrets configuration is only needed for real external AWS infrastructure
 env:
   # AWS
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -794,6 +797,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@master
 
+      # Secrets configuration is only needed for real external AWS infrastructure
       - name: Prepare AWS access via aws-creds.conf
         run: |
           echo "### Create aws-creds.conf file"
@@ -820,7 +824,12 @@ jobs:
 
 
 
+
+
+
 # Uptest
+
+> __Uptest is CURRENTLY NOT SUPPORTED IN THIS REPO!__ Only saving the following docs for later, [when uptest is really ready to be used by people outside of Upbound](https://github.com/upbound/official-providers-ci/issues/153#issuecomment-1756317685)
 
 https://github.com/crossplane/uptest
 
