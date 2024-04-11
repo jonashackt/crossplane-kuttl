@@ -632,6 +632,51 @@ You may even watch your AWS console, where the bucket gets created:
 ![](docs/kuttl-test-bucket-created-aws.png)
 
 
+#### Assertion errors & fixes
+
+If an error occurs like `key is missing from map`:
+
+```shell
+case.go:366: resource VPC:/: .spec.forProvider.instanceTenancy: key is missing from map
+```
+
+one needs to delete that entry from the `01-assert.yaml`.
+
+Even if something appears like 
+
+```shell
+resource Subnet:/: .metadata.labels.zone: value mismatch, expected: eu-central-1a != actual: eu-central-1b
+```
+
+Fix the `key is missing from map` first! Then the others might disappear.
+
+
+Also for better readability, we run the kuttl tests one after another by using the `parallel: 1` configuration in the [`kuttl-test.yaml](kuttl-test.yaml):
+
+```yaml
+...
+parallel: 1 # use parallel: 1 to execute one test after another (e.g. for better readability in CI logs)
+```
+
+If the kuttl output displayes something like `failed to retrieve aws credentials from aws config: failed to refresh cached credentials, static credentials are empty`:
+
+```shell
++status:
++  atProvider: {}
++  conditions:
++  - lastTransitionTime: "2024-04-10T13:27:45Z"
++    message: 'connect failed: cannot initialize the Terraform plugin SDK async external
++      client: cannot get terraform setup: failed to retrieve aws credentials from
++      aws config: failed to refresh cached credentials, static credentials are empty'
++    reason: ReconcileError
++    status: "False"
++    type: Synced
+```
+
+Then you might only be using the `Configure AWS Provider in kuttl without AWS access (checking Resource rendering only)` variant without real AWS credentials. That is no problem and can be ignored, if you only want to check rendering of Managed Resources.
+
+
+
 ### Cleanup after assertion
 
 We should also clean up all resources after the last assertion ran. Therefore let's create a `02-*` step like in [`tests/e2e/objectstorage/02-cleanup.yaml`](tests/e2e/objectstorage/02-cleanup.yaml):
@@ -772,31 +817,6 @@ jobs:
           echo "### Run Crossplane featured kuttl tests"
           kubectl kuttl test
 ```
-
-
-### Fixing GitHub Actions tests: cannot get terraform setup: failed to retrieve aws credentials from aws config
-
-It seems that we need to configure AWS credentials for the Crossplane AWS Provider. Otherwise it won't run:
-
-```shell
-connect failed: cannot initialize the Terraform plugin SDK async external
-        +      client: cannot get terraform setup: failed to retrieve aws credentials from
-        +      aws config: failed to refresh cached credentials, static credentials are empty
-```
-
-So even if we don't really create AWS resources, we need to configure the AWS credentials like this:
-
-```yaml
-env:
-  ...
-  # Configure AWS creds to prevent error: cannot get terraform setup: failed to retrieve aws credentials from aws config
-  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-  AWS_DEFAULT_REGION: 'eu-central-1'
-```
-
-And also create the `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` as Actions secrets in the GitHub repository.
-
 
 
 
