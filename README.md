@@ -74,7 +74,7 @@ brew tap kudobuilder/tap
 brew install kuttl-cli
 ```
 
-One of the best ways to install a kubectl plugin is to use the package manager [krew](https://github.com/kubernetes-sigs/krew). So first install krew via your preferred package manager (see https://krew.sigs.k8s.io/docs/user-guide/setup/install/):
+Alternatively: One of the best ways to install a kubectl plugin is to use the package manager [krew](https://github.com/kubernetes-sigs/krew). So first install krew via your preferred package manager (see https://krew.sigs.k8s.io/docs/user-guide/setup/install/):
 
 ```shell
 # Manjaro Linux
@@ -116,17 +116,11 @@ kubectl-kuttl version 0.15.0
 
 
 
-### Create a kuttl test suite
+### Create a kuttl test suite: The kuttl-test.yaml
 
 https://kuttl.dev/docs/cli.html#examples
 
-First we create a folder `tests/e2e` where the `e2e` is the name of our test suite:
-
-```shell
-mkdir -p tests/e2e
-```
-
-Now in the root of our project we need to create a [`kuttl-test.yaml`](kuttl-test.yaml) defining our `TestSuite`:
+First in the root of our project we need to create a [`kuttl-test.yaml`](kuttl-test.yaml) defining our `TestSuite`:
 
 ```yaml
 apiVersion: kuttl.dev/v1beta1
@@ -146,6 +140,12 @@ We should also add the following lines to our `.gitignore` to prevent us from ch
 ```shell
 kubeconfig
 kind-logs-*
+```
+
+We should also create a folder `tests/e2e` where the `e2e` is the name of our test suite:
+
+```shell
+mkdir -p tests/e2e
 ```
 
 
@@ -272,7 +272,7 @@ kindContext: crossplane-test
 
 
 
-### Option a) Configure AWS Provider in kuttl without AWS access (checking Resource rendering only)
+### Configure AWS Provider in kuttl for testing Resource rendering only (without AWS access)
 
 It is not always needed to really create resources on AWS through out our tests. It might be enough to just check if the Managed Resources are rendered correctly.
 
@@ -333,89 +333,7 @@ spec:
 ```
 
 
-Now running `kubectl kuttl test` should run like this preparing everything for testing with Crossplane.
-
-
-
-
-
-### Option b) Configure AWS Provider in kuttl for real AWS access (checking Rendering & real infrastructure provisioning)
-
-To get this config working, we need to create a `Secret` containing our AWS credentials Crossplane can later use to access AWS. Therefore create an `aws-creds.conf` file ([aws CLI should be installed and configured](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)):
-
-```shell
-echo "[default]
-aws_access_key_id = $(aws configure get aws_access_key_id)
-aws_secret_access_key = $(aws configure get aws_secret_access_key)
-" > aws-creds.conf
-```
-
-> __ATTENTION__: Don't check `aws-creds.conf` into version control. The best is to add `aws-creds.conf` to your `.gitignore`.
-
-Now inside our [`kuttl-test.yaml`](kuttl-test.yaml) we add another `command` statements to create the Secret and configure the AWS Provider:
-
-```yaml
-apiVersion: kuttl.dev/v1beta1
-kind: TestSuite
-timeout: 300 # We definitely need a higher timeout for the external AWS resources to become available
-commands:
-  # Install crossplane via Helm Renovate enabled (see https://stackoverflow.com/a/71765472/4964553)
-  - command: helm dependency update crossplane/install
-  - command: helm upgrade --install --force crossplane --namespace crossplane-system crossplane/install --create-namespace --wait
-
-  # Install the crossplane Upbound AWS S3 Provider Family
-  - command: kubectl apply -f crossplane/provider/upbound-provider-aws-s3.yaml
-  # Wait until AWS Provider is up and running
-  - command: kubectl wait --for=condition=healthy --timeout=180s provider/upbound-provider-aws-s3
-
-  # Create AWS Provider secret (pre-deleting it to prevent errors like this while re-using the kuttl kind cluster)
-  - command: kubectl delete secret aws-creds -n crossplane-system --ignore-not-found
-  - command: kubectl create secret generic aws-creds -n crossplane-system --from-file=creds=./aws-creds.conf
-  # Create ProviderConfig to consume the Secret containing AWS credentials
-  - command: kubectl apply -f crossplane/provider/provider-config-aws.yaml
-testDirs:
-  - tests/e2e/
-startKIND: true
-kindContext: crossplane-test
-```
-
-Before we create the Secret we delete it :) Why? Because we want to omit errors like this:
-
-```shell
-error: failed to create secret secrets "aws-creds" already exists
-```
-
-> See https://stackoverflow.com/a/45881324/4964553 - [The best approach using `dry-run=client`](https://stackoverflow.com/a/45881259/4964553) etc sadly doesn't work with kuttl producing a `error: unknown shorthand flag: 'f' in -f` error.
-
-
-Also I configured a higher timeout for resources to become available [via the `timeout` configuration of our TestSuite](https://kuttl.dev/docs/testing/reference.html#testassert). Otherwise we'll run into errors like this soon:
-
-```shell
-case.go:364: failed in step 1-when-applying-claim
-    case.go:366: command "kubectl wait --for condition=Ready --timeout=180s objectstorage.crossplane.jonashackt.io/managed-upbound-s3" exceeded 30 sec timeout, context deadline exceeded
-```
-
-This is only needed if we want our test to create external resources on AWS. If not, you can leave out the explicit timeout setting.
-
-
-The final bit is to configure the AWS Provider via a `ProviderConfig` which is located in [`crossplane/provider/provider-config-aws.yaml`](crossplane/provider/provider-config-aws.yaml):
-
-```yaml
-apiVersion: aws.upbound.io/v1beta1
-kind: ProviderConfig
-metadata:
-  name: default
-spec:
-  credentials:
-    source: Secret
-    secretRef:
-      namespace: crossplane-system
-      name: aws-creds
-      key: creds
-```
-
-
-Now running `kubectl kuttl test` should run like this preparing everything for testing with Crossplane:
+Now we should be able to run `kubectl kuttl test` and everything sjould be prepared for testing resource rendering with Crossplane:
 
 ```shell
 $ kubectl kuttl test
@@ -557,11 +475,255 @@ commands:
 
 Here we apply our Claim residing in the `examples` dir.
 
-At this point Crossplane should create our S3 bucket in AWS!
 
 
 
-### Validate / Assert 
+
+### Validate / Assert Resource rendering only (without AWS access)
+
+> It's crucial to use `01-assert` as the name here, to get the assertion beeing started after the Claim has been applied.
+
+The BDD term `then` can't really be integrated into the final assert step. But luckily it's named `tests/e2e/objectstorage/01-assert.yaml`:
+
+```yaml
+apiVersion: s3.aws.upbound.io/v1beta1
+kind: Bucket
+metadata:
+  name: kuttl-test-bucket
+spec:
+  forProvider:
+    region: eu-central-1
+---
+apiVersion: s3.aws.upbound.io/v1beta1
+kind: BucketACL
+metadata:
+  name: kuttl-test-bucket-acl
+spec:
+  forProvider:
+    acl: public-read
+    bucket: kuttl-test-bucket
+    bucketRef:
+      name: kuttl-test-bucket
+    region: eu-central-1
+```
+
+This test step will be considered completed once our Managed resources rendered are matching the state that we have defined. If the state is not reached by the time the assert's timeout has expired, then the test step and case will be considered failed. 
+
+Be sure to define the exact `metadata` as in your Claim, otherwise kuttl won't find it and will give an error like this:
+
+```shell
+    logger.go:42: 15:54:03 | objectstorage/1-when-applying-claim | test step failed 1-when-applying-claim
+    ...
+    logger.go:42: 15:54:03 | objectstorage/1-when-applying-claim | objectstorage.crossplane.jonashackt.io "managed-upbound-s3" deleted
+    case.go:364: failed in step 1-when-applying-claim
+    case.go:366: no resources matched of kind: crossplane.jonashackt.io/v1alpha1, Kind=ObjectStorage
+```
+
+Now run our test suite with
+
+```shell
+kubectl kuttl test --skip-cluster-delete
+```
+
+The `--skip-cluster-delete` will preserve the kind cluster, if our tests failed and thus speep up our development cycle - otherwise kind and the Crossplane installation/configuration will take place in every test run. Since kuttl will create a local `kubeconfig` file, it will also reuse the kind cluster automatically in subsequent runs of:
+
+```shell
+kubectl kuttl test --start-kind=false
+```
+
+A sole `kubectl kuttl test` will give `KIND is already running, unable to start` errors.
+
+
+
+
+#### Assertion errors & fixes
+
+If an error occurs like `key is missing from map`:
+
+```shell
+case.go:366: resource VPC:/: .spec.forProvider.instanceTenancy: key is missing from map
+```
+
+one needs to delete that entry from the `01-assert.yaml`.
+
+Even if something appears like 
+
+```shell
+resource Subnet:/: .metadata.labels.zone: value mismatch, expected: eu-central-1a != actual: eu-central-1b
+```
+
+Fix the `key is missing from map` first! Then the others might disappear.
+
+
+Also for better readability, we run the kuttl tests one after another by using the `parallel: 1` configuration in the [`kuttl-test.yaml](kuttl-test.yaml):
+
+```yaml
+...
+parallel: 1 # use parallel: 1 to execute one test after another (e.g. for better readability in CI logs)
+```
+
+If the kuttl output displayes something like `failed to retrieve aws credentials from aws config: failed to refresh cached credentials, static credentials are empty`:
+
+```shell
++status:
++  atProvider: {}
++  conditions:
++  - lastTransitionTime: "2024-04-10T13:27:45Z"
++    message: 'connect failed: cannot initialize the Terraform plugin SDK async external
++      client: cannot get terraform setup: failed to retrieve aws credentials from
++      aws config: failed to refresh cached credentials, static credentials are empty'
++    reason: ReconcileError
++    status: "False"
++    type: Synced
+```
+
+Then you might only be using the AWS Provider in kuttl for testing Resource rendering only (without AWS access) missing real AWS credentials. That is no problem and can be ignored, if you only want to check rendering of Managed Resources.
+
+
+
+
+
+
+
+### Integration Testing: Configure AWS Provider in kuttl for testing actual infrastructure provisioning (with real AWS access)
+
+To get this config working, we need to create a `Secret` containing our AWS credentials Crossplane can later use to access AWS. Therefore create an `aws-creds.conf` file ([aws CLI should be installed and configured](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)):
+
+```shell
+echo "[default]
+aws_access_key_id = $(aws configure get aws_access_key_id)
+aws_secret_access_key = $(aws configure get aws_secret_access_key)
+" > aws-creds.conf
+```
+
+> __ATTENTION__: Don't check `aws-creds.conf` into version control. The best is to add `aws-creds.conf` to your `.gitignore`.
+
+Now inside our [`kuttl-test.yaml`](kuttl-test.yaml) we add another `command` statements to create the Secret and configure the AWS Provider:
+
+```yaml
+apiVersion: kuttl.dev/v1beta1
+kind: TestSuite
+timeout: 300 # We definitely need a higher timeout for the external AWS resources to become available
+commands:
+  # Install crossplane via Helm Renovate enabled (see https://stackoverflow.com/a/71765472/4964553)
+  - command: helm dependency update crossplane/install
+  - command: helm upgrade --install --force crossplane --namespace crossplane-system crossplane/install --create-namespace --wait
+
+  # Install the crossplane Upbound AWS S3 Provider Family
+  - command: kubectl apply -f crossplane/provider/upbound-provider-aws-s3.yaml
+  # Wait until AWS Provider is up and running
+  - command: kubectl wait --for=condition=healthy --timeout=180s provider/upbound-provider-aws-s3
+
+  # Create AWS Provider secret (pre-deleting it to prevent errors like this while re-using the kuttl kind cluster)
+  - command: kubectl delete secret aws-creds -n crossplane-system --ignore-not-found
+  - command: kubectl create secret generic aws-creds -n crossplane-system --from-file=creds=./aws-creds.conf
+  # Create ProviderConfig to consume the Secret containing AWS credentials
+  - command: kubectl apply -f crossplane/provider/provider-config-aws.yaml
+testDirs:
+  - tests/e2e/
+startKIND: true
+kindContext: crossplane-test
+```
+
+Before we create the Secret we delete it :) Why? Because we want to omit errors like this:
+
+```shell
+error: failed to create secret secrets "aws-creds" already exists
+```
+
+> See https://stackoverflow.com/a/45881324/4964553 - [The best approach using `dry-run=client`](https://stackoverflow.com/a/45881259/4964553) etc sadly doesn't work with kuttl producing a `error: unknown shorthand flag: 'f' in -f` error.
+
+
+Also I configured a higher timeout for resources to become available [via the `timeout` configuration of our TestSuite](https://kuttl.dev/docs/testing/reference.html#testassert). Otherwise we'll run into errors like this soon:
+
+```shell
+case.go:364: failed in step 1-when-applying-claim
+    case.go:366: command "kubectl wait --for condition=Ready --timeout=180s objectstorage.crossplane.jonashackt.io/managed-upbound-s3" exceeded 30 sec timeout, context deadline exceeded
+```
+
+This is only needed if we want our test to create external resources on AWS. If not, you can leave out the explicit timeout setting.
+
+
+The final bit is to configure the AWS Provider via a `ProviderConfig` which is located in [`crossplane/provider/provider-config-aws.yaml`](crossplane/provider/provider-config-aws.yaml):
+
+```yaml
+apiVersion: aws.upbound.io/v1beta1
+kind: ProviderConfig
+metadata:
+  name: default
+spec:
+  credentials:
+    source: Secret
+    secretRef:
+      namespace: crossplane-system
+      name: aws-creds
+      key: creds
+```
+
+
+Now running `kubectl kuttl test` should run like this preparing everything for testing with Crossplane:
+
+```shell
+$ kubectl kuttl test
+=== RUN   kuttl
+    harness.go:462: starting setup
+    harness.go:249: running tests with KIND.
+    harness.go:173: temp folder created /tmp/kuttl1667306899
+    harness.go:155: Starting KIND cluster
+    kind.go:66: Adding Containers to KIND...
+    harness.go:275: Successful connection to cluster at: https://127.0.0.1:43619
+    logger.go:42: 10:54:17 |  | running command: [helm dependency update crossplane-install]
+    logger.go:42: 10:54:17 |  | WARNING: Kubernetes configuration file is group-readable. This is insecure. Location: /home/jonashackt/dev/crossplane-objectstorage/kubeconfig
+    logger.go:42: 10:54:17 |  | WARNING: Kubernetes configuration file is world-readable. This is insecure. Location: /home/jonashackt/dev/crossplane-objectstorage/kubeconfig
+    logger.go:42: 10:54:17 |  | Getting updates for unmanaged Helm repositories...
+    logger.go:42: 10:54:18 |  | ...Successfully got an update from the "https://charts.crossplane.io/stable" chart repository
+    logger.go:42: 10:54:18 |  | Saving 1 charts
+    logger.go:42: 10:54:18 |  | Downloading crossplane from repo https://charts.crossplane.io/stable
+    logger.go:42: 10:54:18 |  | Deleting outdated charts
+    logger.go:42: 10:54:18 |  | running command: [helm upgrade --install crossplane --namespace crossplane-system crossplane-install --create-namespace --wait]
+    logger.go:42: 10:54:18 |  | WARNING: Kubernetes configuration file is group-readable. This is insecure. Location: /home/jonashackt/dev/crossplane-objectstorage/kubeconfig
+    logger.go:42: 10:54:18 |  | WARNING: Kubernetes configuration file is world-readable. This is insecure. Location: /home/jonashackt/dev/crossplane-objectstorage/kubeconfig
+    logger.go:42: 10:54:18 |  | Release "crossplane" does not exist. Installing it now.
+    logger.go:42: 10:54:41 |  | NAME: crossplane
+    logger.go:42: 10:54:41 |  | LAST DEPLOYED: Tue Apr  9 10:54:18 2024
+    logger.go:42: 10:54:41 |  | NAMESPACE: crossplane-system
+    logger.go:42: 10:54:41 |  | STATUS: deployed
+    logger.go:42: 10:54:41 |  | REVISION: 1
+    logger.go:42: 10:54:41 |  | TEST SUITE: None
+    logger.go:42: 10:54:41 |  | running command: [kubectl apply -f crossplane/provider/upbound-provider-aws-s3.yaml]
+    logger.go:42: 10:54:41 |  | provider.pkg.crossplane.io/upbound-provider-aws-s3 created
+    logger.go:42: 10:54:41 |  | running command: [kubectl wait --for=condition=healthy --timeout=180s provider/upbound-provider-aws-s3]
+    logger.go:42: 10:55:50 |  | provider.pkg.crossplane.io/upbound-provider-aws-s3 condition met
+    logger.go:42: 10:55:50 |  | running command: [kubectl create secret generic aws-creds -n crossplane-system --from-file=creds=./aws-creds.conf]
+    logger.go:42: 10:55:50 |  | secret/aws-creds created
+    logger.go:42: 10:55:50 |  | running command: [kubectl apply -f crossplane/provider/provider-config-aws.yaml]
+    logger.go:42: 10:55:50 |  | providerconfig.aws.upbound.io/default created
+    harness.go:360: running tests
+    harness.go:73: going to run test suite with timeout of 30 seconds for each step
+    harness.go:372: testsuite: tests/e2e/ has 1 tests
+=== RUN   kuttl/harness
+=== RUN   kuttl/harness/objectstorage
+=== PAUSE kuttl/harness/objectstorage
+=== CONT  kuttl/harness/objectstorage
+    logger.go:42: 10:55:50 | objectstorage | Creating namespace: kuttl-test-just-lemur
+    logger.go:42: 10:55:50 | objectstorage | objectstorage events from ns kuttl-test-just-lemur:
+    logger.go:42: 10:55:50 | objectstorage | Deleting namespace: kuttl-test-just-lemur
+=== CONT  kuttl
+    harness.go:405: run tests finished
+    harness.go:513: cleaning up
+    harness.go:522: collecting cluster logs to kind-logs-1712652956
+    harness.go:570: removing temp folder: "/tmp/kuttl1667306899"
+    harness.go:576: tearing down kind cluster
+--- PASS: kuttl (133.61s)
+    --- PASS: kuttl/harness (0.00s)
+        --- PASS: kuttl/harness/objectstorage (5.20s)
+PASS
+```
+
+
+
+
+### Validate / Assert for testing actual infrastructure provisioning (with real AWS access)
 
 > It's crucial to use `01-assert` as the name here, to get the assertion beeing started after the Claim has been applied.
 
@@ -634,54 +796,12 @@ You may even watch your AWS console, where the bucket gets created:
 ![](docs/kuttl-test-bucket-created-aws.png)
 
 
-#### Assertion errors & fixes
-
-If an error occurs like `key is missing from map`:
-
-```shell
-case.go:366: resource VPC:/: .spec.forProvider.instanceTenancy: key is missing from map
-```
-
-one needs to delete that entry from the `01-assert.yaml`.
-
-Even if something appears like 
-
-```shell
-resource Subnet:/: .metadata.labels.zone: value mismatch, expected: eu-central-1a != actual: eu-central-1b
-```
-
-Fix the `key is missing from map` first! Then the others might disappear.
-
-
-Also for better readability, we run the kuttl tests one after another by using the `parallel: 1` configuration in the [`kuttl-test.yaml](kuttl-test.yaml):
-
-```yaml
-...
-parallel: 1 # use parallel: 1 to execute one test after another (e.g. for better readability in CI logs)
-```
-
-If the kuttl output displayes something like `failed to retrieve aws credentials from aws config: failed to refresh cached credentials, static credentials are empty`:
-
-```shell
-+status:
-+  atProvider: {}
-+  conditions:
-+  - lastTransitionTime: "2024-04-10T13:27:45Z"
-+    message: 'connect failed: cannot initialize the Terraform plugin SDK async external
-+      client: cannot get terraform setup: failed to retrieve aws credentials from
-+      aws config: failed to refresh cached credentials, static credentials are empty'
-+    reason: ReconcileError
-+    status: "False"
-+    type: Synced
-```
-
-Then you might only be using the `Configure AWS Provider in kuttl without AWS access (checking Resource rendering only)` variant without real AWS credentials. That is no problem and can be ignored, if you only want to check rendering of Managed Resources.
 
 
 
 ### Cleanup after assertion
 
-> __The following is only necessary for real external AWS infrastructure:__
+> __The following is only necessary for testing real external AWS infrastructure__
 
 We should also clean up all resources after the last assertion ran. Therefore let's create a `02-*` step like in [`tests/e2e/objectstorage/02-cleanup.yaml`](tests/e2e/objectstorage/02-cleanup.yaml):
 
@@ -940,3 +1060,5 @@ TODO: Didn't get it to work though. Seems that https://github.com/upbound/offici
 # Links
 
 https://aaroneaton.com/walkthroughs/crossplane-package-testing-with-kuttl/
+
+https://github.com/awslabs/crossplane-on-eks/blob/main/tests/kuttl/test-suite.yaml
