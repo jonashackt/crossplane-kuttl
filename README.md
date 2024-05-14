@@ -263,7 +263,7 @@ commands:
   # Install the crossplane Upbound AWS S3 Provider Family
   - command: kubectl apply -f crossplane/provider/upbound-provider-aws-s3.yaml
   # Wait until AWS Provider is up and running
-  - command: kubectl wait --for=condition=healthy --timeout=180s provider/provider-aws-s3
+  - command: kubectl wait --for=condition=healthy --timeout=180s provider/upbound-provider-aws-s3
 testDirs:
   - tests/e2e/
 startKIND: true
